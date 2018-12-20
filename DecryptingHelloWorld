@@ -1,0 +1,136 @@
+-- 04/11/2017
+Very helpful: https://tools.ietf.org/html/rfc6455#page-28
+
+Original Message from client
+
+socket = new WebSocket("ws://localhost:8081"); // This doesnt include the server handshake. Thats a whole other topic.
+socket.send("Hello World!");
+
+1  | 10000001
+2  | 10001100
+3  | 01000000
+4  | 10000000
+5  | 10111011
+6  | 11000101
+7  | 00001000
+8  | 11100101
+9  | 11010111
+10 | 10101001
+11 | 00101111
+12 | 10100000
+13 | 11101100
+14 | 10101010
+15 | 00110010
+16 | 11101100
+17 | 11011111
+18 | 11100100
+
+
+Decrypting it by hand:
+
+----
+1  | 10000001
+-------------
+1 -> finish?
+0 -> Rsv1
+0 -> Rsv2
+0 -> Rsv3
+0000 -> Opcode
+---
+2  | 10001100
+-------------
+1 -> Mask? (Xor mask)
+ 0001100 -> Payload length (Its 12) (If 125 then your fine, if 126 then read the next 16 bits, if 127 read the next 64 bits as length.
+		   If you do end up reading extra bits to get the length then the key and data will be after them.)
+----
+3  | 01000000
+4  | 10000000
+5  | 10111011
+6  | 11000101
+-------------
+This is the mask, we need to do 'payload ^ mask' to get the real message.
+
+To actually use the mask we first need to add them all together
+3 -> 64
+4 -> 128
+5 -> 187
+6 -> 197
+(+ 64 128 187 197) -> 576
+Then get the mod 4 of the result to figure out which byte of the mask to use in the xor operation
+(mod 576 4) -> 0
+So use byte 0 to xor the message.
+
+Example:
+(setf mask (let (mask-lst (list 64 128 187 197))
+	(mask-lst (mod (apply + mask-lst) 4))))
+----
+7  | 00001000
+8  | 11100101
+9  | 11010111
+10 | 10101001
+11 | 00101111
+12 | 10100000
+13 | 11101100
+14 | 10101010
+15 | 00110010
+16 | 11101100
+17 | 11011111
+18 | 11100100
+-------------
+This is the payload. Normally it would be a mix of extension data and application data
+but since we didn't specify a Rsv1-3 the extension data length is 0. Now if we were
+to apply each application byte with the mask key we'd get our characters.
+
+	 App Byte   Mask Byte   Result
+7  | 00001000 ^ 01000000 -> H
+8  | 11100101 ^ 01000000 -> e
+9  | 11010111 ^ 01000000 -> l
+10 | 10101001 ^ 01000000 -> l
+11 | 00101111 ^ 01000000 -> o
+12 | 10100000 ^ 01000000 -> ' '
+13 | 11101100 ^ 01000000 -> W
+14 | 10101010 ^ 01000000 -> o
+15 | 00110010 ^ 01000000 -> r
+16 | 11101100 ^ 01000000 -> l
+17 | 11011111 ^ 01000000 -> d
+18 | 11100100 ^ 01000000 -> !
+
+
+Keep in mind that most languages don't operate on the bit level. So if you want to run
+the examples then you'll have to turn each group into a byte. Using 0bxxxxxxxx should
+work in any language. (Example 0b00101010)
+
+01000000
+00001000
+
+
+Decrypting a pong message
+
+msg:
+
+1  | 10001010
+2  | 10000000
+3  | 10011100
+4  | 10000100
+5  | 00011100
+6  | 11011001
+
+--
+1  | 10001010
+
+1 -> fin flag
+000 -> RSV1-3 (empty)
+1010 -> opcode (10 is pong)
+
+--
+2  | 10000000
+
+first byte is a mask flag, the rest are for payload size (size of 0)
+
+--
+The client sent a mask even though there isn't a message to encrypt
+
+3  | 10011100
+4  | 10000100
+5  | 00011100
+6  | 11011001

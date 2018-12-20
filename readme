@@ -1,0 +1,19 @@
+Okay so this is where I left off:
+
+I've figured out how to parse a xor encoded client response, now I just need
+to write the code to do that. I can do that in C or in lisp, fast vs easy.
+
+Keep in mind that max size of a message is ~4000 bytes.
+
+
+(list 0b10000000 0b01000000 0b00100000 0b00010000 0b00001000 0b00000100 0b00000010 0b00000001)
+
+
+8bytes - 64bits
+
+0000100000001000000010000000100000001000000010000000100000001000
+
+00001000000010000000100000001000
+
+
+0000000000000000000000000000000000000000000000001000000000000000
